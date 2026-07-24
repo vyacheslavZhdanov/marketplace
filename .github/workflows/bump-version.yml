@@ -1,0 +1,57 @@
+name: Bump plugin version
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'plugins/**'
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    # Не запускаем, если коммит сделан самим workflow
+    if: "!startsWith(github.event.head_commit.message, 'chore: bump')"
+
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Bump patch version for changed plugins
+        id: bump
+        run: |
+          changed=false
+          for plugin_json in plugins/*/.claude-plugin/plugin.json; do
+            plugin_dir=$(dirname $(dirname "$plugin_json"))
+            plugin_name=$(basename "$plugin_dir")
+
+            # Проверяем, есть ли изменения в этом плагине в последнем коммите
+            if git diff --name-only HEAD~1 HEAD | grep -q "^plugins/$plugin_name/"; then
+              current=$(node -e "console.log(require('./$plugin_json').version)")
+              IFS='.' read -r major minor patch <<< "$current"
+              next="$major.$minor.$((patch + 1))"
+              node -e "
+                const fs = require('fs');
+                const p = JSON.parse(fs.readFileSync('./$plugin_json', 'utf8'));
+                p.version = '$next';
+                fs.writeFileSync('./$plugin_json', JSON.stringify(p, null, 2) + '\n');
+              "
+              echo "  $plugin_name: $current → $next"
+              changed=true
+            fi
+          done
+          echo "changed=$changed" >> $GITHUB_OUTPUT
+
+      - name: Commit and tag
+        if: steps.bump.outputs.changed == 'true'
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add plugins/*/.claude-plugin/plugin.json
+          version=$(node -e "console.log(require('./plugins/my-tools/.claude-plugin/plugin.json').version)")
+          git commit -m "chore: bump my-tools to v$version"
+          git tag "my-tools-v$version"
+          git push origin master --tags
