@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Figma vs Device</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="tabs">
+  <button class="tab-btn active" onclick="switchTab('diff')">Pixel Diff</button>
+  <button class="tab-btn" onclick="switchTab('overlay')">Overlay</button>
+</div>
+
+<!-- Diff tab -->
+<div id="tab-diff" class="tab-content active">
+  <div class="panels">
+    <div class="panel">
+      <h3>Устройство</h3>
+      <canvas id="device"></canvas>
+    </div>
+    <div class="panel">
+      <h3>Diff</h3>
+      <canvas id="diff"></canvas>
+    </div>
+    <div class="panel">
+      <h3>Figma</h3>
+      <canvas id="figma"></canvas>
+    </div>
+  </div>
+  <div id="stats">Вычисляю...</div>
+  <p class="drag-hint" style="margin-top: 8px;">↕ Перетащи «Устройство» для выравнивания по Y</p>
+</div>
+
+<!-- Overlay tab -->
+<div id="tab-overlay" class="tab-content">
+  <div class="overlay-controls">
+    <label>Прозрачность девайса: <span id="opacity-val">50</span>%</label>
+    <input type="range" id="opacity-slider" min="0" max="100" value="50"
+           oninput="onOpacityChange(this.value)">
+    <div class="scale-control">
+      <button class="scale-btn" onclick="changeScale(-25)">−</button>
+      <span id="scale-val">100%</span>
+      <button class="scale-btn" onclick="changeScale(+25)">+</button>
+    </div>
+    <button class="toggle-btn active" id="device-toggle" onclick="toggleDeviceLayer()">Устройство: вкл</button>
+    <span class="drag-hint">↕ Перетащи для выравнивания по Y</span>
+  </div>
+  <div id="overlay-outer">
+    <div id="overlay-scale-wrap">
+      <div id="overlay-wrapper">
+        <canvas id="figma-layer"></canvas>
+        <canvas id="device-layer"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
