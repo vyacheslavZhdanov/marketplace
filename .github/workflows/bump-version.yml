@@ -5,6 +5,7 @@ on:
     branches: [master]
     paths:
       - 'plugins/**'
+      - '.github/workflows/bump-version.yml'
 
 jobs:
   bump:
