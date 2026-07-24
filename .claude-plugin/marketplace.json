@@ -1,0 +1,12 @@
+{
+  "name": "zhdanov-plugins",
+  "description": "Personal Claude Code plugins",
+  "owner": { "name": "Zhdanov_Viacheslav" },
+  "plugins": [
+    {
+      "name": "my-tools",
+      "description": "My custom skills",
+      "source": "./plugins/my-tools"
+    }
+  ]
+}
