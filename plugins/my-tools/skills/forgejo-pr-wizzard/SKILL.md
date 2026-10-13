@@ -17,13 +17,13 @@ description: Use when user asks to create a PR, open a pull request, push curren
 
 | Инструмент | Назначение |
 |---|---|
-| `mcp__atlassian__getJiraIssue` | Получение summary и URL Jira-задачи |
+| `python "${CLAUDE_SKILL_DIR}/../../scripts/jira.py"` | Получение summary и URL Jira-задачи (`--help` — все команды) |
 | `python "${CLAUDE_SKILL_DIR}/scripts/forgejo.py"` | Проверки и создание PR в Forgejo (`--help` — все команды) |
 | `AskUserQuestion` | Интерактивный выбор целевой ветки (НЕ для согласования описания) |
 
 ### Предусловия окружения
 
-- Доступ к Jira (Atlassian MCP настроен и аутентифицирован)
+- Доступ к Jira `https://jira.sun-team.ru` (внутренняя сеть, нужен VPN): в корне проекта `.secrets/jira.json` — `{"url": "https://jira.sun-team.ru", "token": "<Personal Access Token>"}`; проверка: `python "${CLAUDE_SKILL_DIR}/../../scripts/jira.py" whoami`
 - Python 3 (скрипт использует только stdlib)
 - В корне git-репозитория проекта (папка `.secrets/` должна быть в `.gitignore`):
   - `.secrets/forgejo.json` — `{"url": "https://git.global.internal", "username": "<логин>", "token": "<токен Forgejo>"}`
@@ -45,7 +45,13 @@ description: Use when user asks to create a PR, open a pull request, push curren
 git branch --show-current
 ```
 
-Получи summary задачи и её URL через `mcp__atlassian__getJiraIssue`.
+Получи summary задачи и её URL:
+
+```bash
+python "${CLAUDE_SKILL_DIR}/../../scripts/jira.py" issue ECO-XXXX --fields summary
+```
+
+В первой строке вывода — ключ и ссылка вида `https://jira.sun-team.ru/browse/ECO-XXXX`.
 
 #### 1б. Целевая ветка
 
@@ -175,6 +181,7 @@ EOF
 | Английский язык в описании | Переключить на русский |
 | Описание через `--body "..."` с backticks | Использовать `--body-file -` и heredoc `<<'EOF'` |
 | Создание PR без dry-run | Сначала `--dry-run`, потом реальный вызов |
+| Jira через Atlassian MCP | Jira теперь self-hosted, MCP к ней не подключается — только `jira.py` |
 | Попытка использовать `fj`/`curl` | Только `forgejo.py` из скилла — им доверен CA GRI |
 | `api GET /users/...` с ведущим `/` в Git Bash | Писать путь без ведущего `/`: `users/search?q=...` |
 | Ожидание `close_source_branch` как в Bitbucket | В Forgejo удаление ветки выбирается при мёрже, при создании PR не задаётся |

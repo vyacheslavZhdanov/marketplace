@@ -13,17 +13,17 @@ description: Use when user asks to create a PR, open a pull request, push curren
 
 ## Requirements
 
-### MCP-инструменты
+### Инструменты
 
 | Инструмент | Назначение |
 |---|---|
-| `mcp__atlassian__getJiraIssue` | Получение summary и URL Jira-задачи |
+| `python "${CLAUDE_SKILL_DIR}/../../scripts/jira.py"` | Получение summary и URL Jira-задачи (`--help` — все команды) |
 | `mcp__bitbucket__create_pull_request` | Создание PR в Bitbucket |
 | `AskUserQuestion` | Интерактивный выбор целевой ветки и согласование описания |
 
 ### Предусловия окружения
 
-- Наличие доступа к Jira (Atlassian MCP настроен и аутентифицирован)
+- Доступ к Jira `https://jira.sun-team.ru` (внутренняя сеть, нужен VPN): в корне проекта `.secrets/jira.json` — `{"url": "https://jira.sun-team.ru", "token": "<Personal Access Token>"}`; проверка: `python "${CLAUDE_SKILL_DIR}/../../scripts/jira.py" whoami`
 - Наличие доступа к Bitbucket (Bitbucket MCP настроен и аутентифицирован)
 - Текущая ветка содержит номер задачи в формате `ECO-XXXX`
 - Репозиторий: `sl-android`, workspace: `sunlight_team`
@@ -40,7 +40,13 @@ description: Use when user asks to create a PR, open a pull request, push curren
 git branch --show-current
 ```
 
-Получи summary задачи и её URL через `mcp__atlassian__getJiraIssue`.
+Получи summary задачи и её URL:
+
+```bash
+python "${CLAUDE_SKILL_DIR}/../../scripts/jira.py" issue ECO-XXXX --fields summary
+```
+
+В первой строке вывода — ключ и ссылка вида `https://jira.sun-team.ru/browse/ECO-XXXX`.
 
 #### 1б. Целевая ветка
 

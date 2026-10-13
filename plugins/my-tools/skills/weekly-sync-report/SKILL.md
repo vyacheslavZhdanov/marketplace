@@ -18,11 +18,10 @@ description: Use when user asks to prepare a weekly sync report ("виклик"/
 
 | Инструмент | Назначение |
 |---|---|
-| `mcp__atlassian__searchJiraIssuesUsingJql` | Поиск задач по worklog и по спринту |
+| `python "${CLAUDE_SKILL_DIR}/../../scripts/jira.py"` | Поиск задач по worklog и по спринту (`--help` — все команды) |
 | `Bash` | Расчёт диапазона дат |
-| `Grep` | Извлечение данных из больших сохранённых ответов MCP |
 
-**Site:** `itgri.atlassian.net` (передаётся как `cloudId` напрямую).
+**Jira:** self-hosted `https://jira.sun-team.ru` (внутренняя сеть, нужен VPN). Конфиг — `.secrets/jira.json` в корне проекта: `{"url": "https://jira.sun-team.ru", "token": "<Personal Access Token>"}`. Проверка: `python "${CLAUDE_SKILL_DIR}/../../scripts/jira.py" whoami`.
 
 ## Шаги
 
@@ -38,29 +37,26 @@ echo "$tuesday_prev -> $monday"
 
 ### 2. Запроси задачи со списанным временем
 
+```bash
+python "${CLAUDE_SKILL_DIR}/../../scripts/jira.py" search 'project = ECO AND worklogAuthor = currentUser() AND worklogDate >= "<tuesday_prev>" AND worklogDate <= "<monday>" ORDER BY updated DESC'
 ```
-mcp__atlassian__searchJiraIssuesUsingJql
-cloudId: "itgri.atlassian.net"
-jql: project = ECO AND worklogAuthor = currentUser() AND worklogDate >= "<tuesday_prev>" AND worklogDate <= "<monday>" ORDER BY updated DESC
-fields: ["summary"]
-```
+
+Каждая строка вывода: `ключ  summary  ссылка` (через табуляцию).
 
 Каждая найденная задача = один буллит в разделе "прошлая неделя". Дедупликация не нужна — JQL уже возвращает по одной записи на задачу, даже если списаний было несколько.
 
 ### 3. Запроси задачи текущего спринта в порядке доски
 
-```
-mcp__atlassian__searchJiraIssuesUsingJql
-cloudId: "itgri.atlassian.net"
-jql: project = ECO AND sprint in openSprints() AND assignee = currentUser() AND statusCategory != Done AND issuetype not in subtaskIssueTypes() AND cf[12952] is not EMPTY ORDER BY Rank ASC
-fields: ["summary", "customfield_12952", "customfield_12954"]
+```bash
+python "${CLAUDE_SKILL_DIR}/../../scripts/jira.py" search 'project = ECO AND cf[10109] in openSprints() AND assignee = currentUser() AND statusCategory != Done AND issuetype not in subtaskIssueTypes() AND cf[10818] is not EMPTY ORDER BY Rank ASC' --fields summary,customfield_10818,customfield_10819
 ```
 
-- `customfield_12952` = **DEV est (ч)**
-- `customfield_12954` = **DEV spent (ч)**
+- `cf[10109]` = поле **Спринт** (в этой Jira оно локализовано, поэтому `sprint in openSprints()` не работает — только через `cf[10109]`)
+- `customfield_10818` = **DEV est (ч)**
+- `customfield_10819` = **DEV spent (ч)** (пустое значение = 0)
 - `statusCategory != Done` отфильтровывает уже завершённые задачи (включая нестандартные "готовые" статусы вроде `Merged` — они относятся к категории Done).
 - `issuetype not in subtaskIssueTypes()` исключает подзадачи — в план на неделю идут только полноценные задачи.
-- `cf[12952] is not EMPTY` исключает задачи без выставленной оценки DEV est — по ним нельзя посчитать бюджет, поэтому в план они не попадают вовсе (не показывать с пометкой, а просто не включать).
+- `cf[10818] is not EMPTY` исключает задачи без выставленной оценки DEV est — по ним нельзя посчитать бюджет, поэтому в план они не попадают вовсе (не показывать с пометкой, а просто не включать).
 
 ### 4. Посчитай, сколько задач помещается в рабочую неделю
 
@@ -86,7 +82,7 @@ remaining = max(0, DEV est - DEV spent)
 
  **Формат буллита — суть задачи текстом, ссылка — обычным текстом (не markdown-ссылка, без скобок):**
 ```
-- <краткая суть> https://itgri.atlassian.net/browse/ECO-XXXX
+- <краткая суть> https://jira.sun-team.ru/browse/ECO-XXXX
 ```
 
 **Формат для сгруппированных задач — общая формулировка, затем все ссылки группы через запятую:**
@@ -96,8 +92,8 @@ remaining = max(0, DEV est - DEV spent)
 
 **Примеры:**
 ```
-- Новый стиль карты, кнопки скейлинга и обновлённое поведение FAB-ов https://itgri.atlassian.net/browse/ECO-17864, https://itgri.atlassian.net/browse/ECO-17868, https://itgri.atlassian.net/browse/ECO-17867
-- Поднятие версии SDK Yandex Pay https://itgri.atlassian.net/browse/ECO-19469
+- Новый стиль карты, кнопки скейлинга и обновлённое поведение FAB-ов https://jira.sun-team.ru/browse/ECO-17864, https://jira.sun-team.ru/browse/ECO-17868, https://jira.sun-team.ru/browse/ECO-17867
+- Поднятие версии SDK Yandex Pay https://jira.sun-team.ru/browse/ECO-19469
 ```
 
 ### 6. Выведи готовый отчёт в чат
@@ -128,10 +124,11 @@ remaining = max(0, DEV est - DEV spent)
 
 | Ошибка | Как исправить |
 |---|---|
-| Ответ MCP превышает лимит токенов (много задач в спринте) | Инструмент сохраняет полный JSON в файл и подсказывает путь — не читай файл целиком, используй `Grep` с паттерном вида `"key":"ECO-\d+"` или по имени нужного customfield, чтобы вытащить только нужные значения |
+| Jira через Atlassian MCP / `itgri.atlassian.net` | Jira переехала на self-hosted `jira.sun-team.ru`, MCP к ней не подключается — только `jira.py` |
+| `sprint in openSprints()` → «Поле sprint не существует» | Поле спринта локализовано — писать `cf[10109] in openSprints()` |
 | Включены задачи в статусе Done/Merged в план на неделю | Фильтровать по `statusCategory != Done`, а не по конкретному статусу — "готовых" статусов может быть несколько |
 | Буллит = дословный Jira summary с префиксами `[AND]` | Переформулировать кратко и по-человечески, убрать служебные префиксы |
-| В плане на неделю оказались подзадачи или задачи без DEV est | Фильтровать их сразу в JQL (`issuetype not in subtaskIssueTypes()`, `cf[12952] is not EMPTY`), а не показывать с пометкой |
+| В плане на неделю оказались подзадачи или задачи без DEV est | Фильтровать их сразу в JQL (`issuetype not in subtaskIssueTypes()`, `cf[10818] is not EMPTY`), а не показывать с пометкой |
 | План на неделю пуст, потому что первая задача одна уже превышает 24ч | Всё равно включить её одну |
 | Порядок задач в плане не совпадает с доской | Сортировать через `ORDER BY Rank ASC` — это соответствует порядку карточек на Scrum-доске |
 | Буллит показывает номер задачи (`ECO-XXXX`) как текст | Номер задачи не выводится отдельным токеном — ссылка инлайнится прямо в саму суть-фразу: `[суть](url)` |
