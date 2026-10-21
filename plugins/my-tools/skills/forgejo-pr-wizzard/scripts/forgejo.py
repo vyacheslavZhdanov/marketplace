@@ -29,6 +29,7 @@
   python forgejo.py pr review 1 --event COMMENT|APPROVE|REQUEST_CHANGES [--body "..."]
                                         [--line path:line:текст ...]
   python forgejo.py issue list [--state ...] | issue view 5 | issue comment 5 "текст"
+  python forgejo.py reviewers suggest [--team android-developers] [--prs 50] [--pr 1]
   python forgejo.py api GET repos/{repo}/pulls [--data '{"k": "v"}']
   (в Git Bash путь пишется без ведущего '/', иначе MSYS превратит его в путь Windows)
 
@@ -89,6 +90,8 @@ class Client:
 
     def request(self, method: str, path: str, data=None, raw: bool = False):
         url = path if path.startswith("http") else self.base + path
+        # Кириллица и пробелы в query (users/search?q=...) — urllib не кодирует их сам
+        url = urllib.parse.quote(url, safe=":/?&=%#+,;@")
         headers = {"Authorization": "token " + self._token, "Accept": "application/json"}
         body = None
         if data is not None:
@@ -469,6 +472,55 @@ def cmd_issue_view(client, args):
         print_body(comment["body"])
 
 
+def find_team(client, org: str, name: str) -> dict:
+    for team in client.get_all(f"/orgs/{org}/teams"):
+        if team["name"] == name:
+            return team
+    raise ForgejoError(f"Команда {name} не найдена в организации {org}")
+
+
+def pr_participants(client, repo: str, pr: dict) -> set[str]:
+    """Автор, ожидающие ревьюеры и все, кто уже оставил ревью (из requested они пропадают)."""
+    reviews = client.get_all(f"/repos/{repo}/pulls/{pr['number']}/reviews")
+    reviewed = {review["user"]["login"] for review in reviews if review.get("user")}
+    return {pr["user"]["login"], *reviewer_logins(pr), *reviewed}
+
+
+def cmd_reviewers_suggest(client, args):
+    org = args.repo.split("/")[0]
+    team = find_team(client, org, args.team)
+    members = client.get_all(f"/teams/{team['id']}/members")
+
+    excluded = {client.get("/user")["login"]}
+    if args.pr:
+        pr = client.get(f"/repos/{args.repo}/pulls/{args.pr}")
+        excluded |= {pr["user"]["login"], *reviewer_logins(pr)}
+
+    recent_prs = client.get(f"/repos/{args.repo}/pulls?state=all&sort=recentupdate&limit={args.prs}")
+    counts: dict[str, int] = {}
+    for recent_pr in recent_prs or []:
+        for login in pr_participants(client, args.repo, recent_pr):
+            counts[login] = counts.get(login, 0) + 1
+
+    candidates = [
+        {
+            "login": member["login"],
+            "full_name": member.get("full_name") or member["login"],
+            "count": counts.get(member["login"], 0),
+        }
+        for member in members
+        if member["login"] not in excluded
+    ]
+    # full_name в Forgejo — «Имя Фамилия», при равной активности сортируем по фамилии
+    candidates.sort(key=lambda c: (-c["count"], c["full_name"].split()[-1]))
+
+    if args.json:
+        return print_json(candidates)
+    print(f"Команда {args.team}, активность в {len(recent_prs or [])} последних PR {args.repo}:")
+    for candidate in candidates:
+        print(f"{candidate['count']:>3}\t{candidate['login']}\t{candidate['full_name']}")
+
+
 def cmd_api(client, args):
     path = args.path.replace("{repo}", args.repo) if "{repo}" in args.path else args.path
     # Git Bash превращает аргумент "/repos/..." в "C:/Program Files/Git/repos/...".
@@ -569,6 +621,17 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("number", type=int)
     p.add_argument("body")
     p.set_defaults(func=cmd_comment)
+
+    reviewers = sub.add_parser("reviewers").add_subparsers(dest="action", required=True)
+    p = reviewers.add_parser(
+        "suggest",
+        parents=[common],
+        help="участники команды, отсортированные по активности в последних PR репозитория",
+    )
+    p.add_argument("--team", default="android-developers", help="команда организации репозитория")
+    p.add_argument("--prs", type=int, default=50, help="сколько последних PR учитывать")
+    p.add_argument("--pr", type=int, help="исключить автора и уже назначенных ревьюеров этого PR")
+    p.set_defaults(func=cmd_reviewers_suggest)
 
     p = sub.add_parser("api", parents=[common], help="сырой запрос; {repo} подставляется")
     p.add_argument("method")
